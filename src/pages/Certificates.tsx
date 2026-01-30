@@ -1,15 +1,18 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Award, ExternalLink, Plus, X, Upload } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Calendar, Award, ExternalLink, Upload, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PageLayout from '@/components/layout/PageLayout';
 import SectionHeader from '@/components/ui/SectionHeader';
 import AdminButton from '@/components/admin/AdminButton';
 import EmptyState from '@/components/ui/EmptyState';
-import { certificates } from '@/lib/mockData';
+import CertificateFormModal from '@/components/admin/CertificateFormModal';
+import DeleteConfirmModal from '@/components/admin/DeleteConfirmModal';
+import { certificates as initialCertificates } from '@/lib/mockData';
 import { Certificate } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
+import { useAdmin } from '@/contexts/AdminContext';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -25,13 +28,66 @@ const itemVariants = {
 };
 
 export default function Certificates() {
+  const { isAdmin } = useAdmin();
+  const [certificates, setCertificates] = useState<Certificate[]>(initialCertificates);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
+
+  // Admin modals
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingCertificate, setEditingCertificate] = useState<Certificate | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingCertificate, setDeletingCertificate] = useState<Certificate | null>(null);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'long',
       year: 'numeric',
     });
+  };
+
+  const handleAddCertificate = () => {
+    setEditingCertificate(null);
+    setFormModalOpen(true);
+  };
+
+  const handleEditCertificate = (cert: Certificate, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingCertificate(cert);
+    setFormModalOpen(true);
+  };
+
+  const handleDeleteCertificate = (cert: Certificate, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingCertificate(cert);
+    setDeleteModalOpen(true);
+  };
+
+  const handleSaveCertificate = (certData: Partial<Certificate>) => {
+    if (editingCertificate) {
+      setCertificates(prev => prev.map(c => 
+        c.id === editingCertificate.id ? { ...c, ...certData } : c
+      ));
+    } else {
+      const newCertificate: Certificate = {
+        id: Date.now().toString(),
+        title: certData.title || '',
+        issuer: certData.issuer || '',
+        issueDate: certData.issueDate || new Date().toISOString(),
+        imageUrl: certData.imageUrl || '',
+        credentialUrl: certData.credentialUrl,
+        createdAt: new Date().toISOString(),
+      };
+      setCertificates(prev => [newCertificate, ...prev]);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (deletingCertificate) {
+      setCertificates(prev => prev.filter(c => c.id !== deletingCertificate.id));
+      toast({ title: 'Certificate Deleted', description: `"${deletingCertificate.title}" has been removed.`, variant: 'destructive' });
+      setDeleteModalOpen(false);
+      setDeletingCertificate(null);
+    }
   };
 
   return (
@@ -44,7 +100,7 @@ export default function Certificates() {
               subtitle="Professional certifications and achievements"
             />
             <AdminButton
-              onClick={() => toast({ title: 'Add Certificate', description: 'Upload form would open here.' })}
+              onClick={handleAddCertificate}
               icon={<Upload className="w-4 h-4 mr-1" />}
             >
               Upload Certificate
@@ -64,9 +120,27 @@ export default function Certificates() {
                   key={cert.id}
                   variants={itemVariants}
                   whileHover={{ y: -5 }}
-                  className="bg-card rounded-xl shadow-card border border-border overflow-hidden cursor-pointer group"
+                  className="bg-card rounded-xl shadow-card border border-border overflow-hidden cursor-pointer group relative"
                   onClick={() => setSelectedCertificate(cert)}
                 >
+                  {/* Admin Controls */}
+                  {isAdmin && (
+                    <div className="absolute top-3 right-3 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => handleEditCertificate(cert, e)}
+                        className="p-2 rounded-md bg-background/80 backdrop-blur hover:bg-background text-muted-foreground hover:text-foreground"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteCertificate(cert, e)}
+                        className="p-2 rounded-md bg-background/80 backdrop-blur hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
                   {/* Certificate Image */}
                   <div className="aspect-[4/3] bg-muted relative overflow-hidden">
                     <img
@@ -102,7 +176,7 @@ export default function Certificates() {
               description="Start showcasing your certifications by uploading your first certificate."
               icon={<Award className="w-10 h-10 text-muted-foreground" />}
               actionLabel="Upload Certificate"
-              onAction={() => toast({ title: 'Upload Certificate' })}
+              onAction={handleAddCertificate}
             />
           )}
         </div>
@@ -119,7 +193,6 @@ export default function Certificates() {
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-6 mt-4">
-                {/* Full Image */}
                 <div className="bg-muted rounded-lg overflow-hidden">
                   <img
                     src={selectedCertificate.imageUrl}
@@ -128,7 +201,6 @@ export default function Certificates() {
                   />
                 </div>
 
-                {/* Details */}
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <p className="text-muted-foreground">
@@ -156,6 +228,22 @@ export default function Certificates() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Add/Edit Certificate Modal */}
+      <CertificateFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        certificate={editingCertificate}
+        onSave={handleSaveCertificate}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title={deletingCertificate?.title || 'Certificate'}
+      />
     </PageLayout>
   );
 }

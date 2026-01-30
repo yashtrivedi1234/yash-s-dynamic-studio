@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Trophy, Calendar, ExternalLink, Plus, Edit, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import PageLayout from '@/components/layout/PageLayout';
 import SectionHeader from '@/components/ui/SectionHeader';
 import AdminButton from '@/components/admin/AdminButton';
 import EmptyState from '@/components/ui/EmptyState';
-import { achievements } from '@/lib/mockData';
+import AchievementFormModal from '@/components/admin/AchievementFormModal';
+import DeleteConfirmModal from '@/components/admin/DeleteConfirmModal';
+import { achievements as initialAchievements } from '@/lib/mockData';
+import { Achievement } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { useAdmin } from '@/contexts/AdminContext';
 
@@ -24,12 +27,61 @@ const itemVariants = {
 
 export default function Achievements() {
   const { isAdmin } = useAdmin();
+  const [achievements, setAchievements] = useState<Achievement[]>(initialAchievements);
+
+  // Admin modals
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingAchievement, setEditingAchievement] = useState<Achievement | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingAchievement, setDeletingAchievement] = useState<Achievement | null>(null);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'long',
       year: 'numeric',
     });
+  };
+
+  const handleAddAchievement = () => {
+    setEditingAchievement(null);
+    setFormModalOpen(true);
+  };
+
+  const handleEditAchievement = (ach: Achievement) => {
+    setEditingAchievement(ach);
+    setFormModalOpen(true);
+  };
+
+  const handleDeleteAchievement = (ach: Achievement) => {
+    setDeletingAchievement(ach);
+    setDeleteModalOpen(true);
+  };
+
+  const handleSaveAchievement = (achData: Partial<Achievement>) => {
+    if (editingAchievement) {
+      setAchievements(prev => prev.map(a => 
+        a.id === editingAchievement.id ? { ...a, ...achData } : a
+      ));
+    } else {
+      const newAchievement: Achievement = {
+        id: Date.now().toString(),
+        title: achData.title || '',
+        description: achData.description || '',
+        date: achData.date || new Date().toISOString(),
+        proofUrl: achData.proofUrl,
+        createdAt: new Date().toISOString(),
+      };
+      setAchievements(prev => [newAchievement, ...prev]);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (deletingAchievement) {
+      setAchievements(prev => prev.filter(a => a.id !== deletingAchievement.id));
+      toast({ title: 'Achievement Deleted', description: `"${deletingAchievement.title}" has been removed.`, variant: 'destructive' });
+      setDeleteModalOpen(false);
+      setDeletingAchievement(null);
+    }
   };
 
   return (
@@ -42,7 +94,7 @@ export default function Achievements() {
               subtitle="Milestones and recognitions along my journey"
             />
             <AdminButton
-              onClick={() => toast({ title: 'Add Achievement', description: 'Achievement form would open here.' })}
+              onClick={handleAddAchievement}
               icon={<Plus className="w-4 h-4 mr-1" />}
             >
               Add Achievement
@@ -57,7 +109,7 @@ export default function Achievements() {
               animate="visible"
               className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8"
             >
-              {achievements.map((achievement, index) => (
+              {achievements.map((achievement) => (
                 <motion.div
                   key={achievement.id}
                   variants={itemVariants}
@@ -68,13 +120,13 @@ export default function Achievements() {
                   {isAdmin && (
                     <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => toast({ title: 'Edit Achievement' })}
+                        onClick={() => handleEditAchievement(achievement)}
                         className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => toast({ title: 'Delete Achievement', variant: 'destructive' })}
+                        onClick={() => handleDeleteAchievement(achievement)}
                         className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -118,11 +170,27 @@ export default function Achievements() {
               description="Start showcasing your accomplishments by adding your first achievement."
               icon={<Trophy className="w-10 h-10 text-muted-foreground" />}
               actionLabel="Add Achievement"
-              onAction={() => toast({ title: 'Add Achievement' })}
+              onAction={handleAddAchievement}
             />
           )}
         </div>
       </section>
+
+      {/* Add/Edit Achievement Modal */}
+      <AchievementFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        achievement={editingAchievement}
+        onSave={handleSaveAchievement}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title={deletingAchievement?.title || 'Achievement'}
+      />
     </PageLayout>
   );
 }

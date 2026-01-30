@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Building, Plus, Edit, Trash2 } from 'lucide-react';
 import PageLayout from '@/components/layout/PageLayout';
 import SectionHeader from '@/components/ui/SectionHeader';
 import AdminButton from '@/components/admin/AdminButton';
 import SkillBadge from '@/components/ui/SkillBadge';
-import { experiences } from '@/lib/mockData';
+import ExperienceFormModal from '@/components/admin/ExperienceFormModal';
+import DeleteConfirmModal from '@/components/admin/DeleteConfirmModal';
+import { experiences as initialExperiences } from '@/lib/mockData';
+import type { Experience } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { useAdmin } from '@/contexts/AdminContext';
 
@@ -23,12 +27,64 @@ const itemVariants = {
 
 export default function Experience() {
   const { isAdmin } = useAdmin();
+  const [experiences, setExperiences] = useState<Experience[]>(initialExperiences);
+
+  // Admin modals
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingExperience, setEditingExperience] = useState<Experience | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingExperience, setDeletingExperience] = useState<Experience | null>(null);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       year: 'numeric',
     });
+  };
+
+  const handleAddExperience = () => {
+    setEditingExperience(null);
+    setFormModalOpen(true);
+  };
+
+  const handleEditExperience = (exp: Experience) => {
+    setEditingExperience(exp);
+    setFormModalOpen(true);
+  };
+
+  const handleDeleteExperience = (exp: Experience) => {
+    setDeletingExperience(exp);
+    setDeleteModalOpen(true);
+  };
+
+  const handleSaveExperience = (expData: Partial<Experience>) => {
+    if (editingExperience) {
+      setExperiences(prev => prev.map(e => 
+        e.id === editingExperience.id ? { ...e, ...expData } : e
+      ));
+    } else {
+      const newExperience: Experience = {
+        id: Date.now().toString(),
+        company: expData.company || '',
+        role: expData.role || '',
+        startDate: expData.startDate || new Date().toISOString(),
+        endDate: expData.endDate,
+        current: expData.current || false,
+        description: expData.description || '',
+        techStack: expData.techStack || [],
+        createdAt: new Date().toISOString(),
+      };
+      setExperiences(prev => [newExperience, ...prev]);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (deletingExperience) {
+      setExperiences(prev => prev.filter(e => e.id !== deletingExperience.id));
+      toast({ title: 'Experience Deleted', description: `"${deletingExperience.role}" has been removed.`, variant: 'destructive' });
+      setDeleteModalOpen(false);
+      setDeletingExperience(null);
+    }
   };
 
   return (
@@ -41,7 +97,7 @@ export default function Experience() {
               subtitle="My professional journey and the companies I've worked with"
             />
             <AdminButton
-              onClick={() => toast({ title: 'Add Experience', description: 'Experience form would open here.' })}
+              onClick={handleAddExperience}
               icon={<Plus className="w-4 h-4 mr-1" />}
             >
               Add Experience
@@ -59,7 +115,7 @@ export default function Experience() {
               {/* Timeline line */}
               <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-border" />
 
-              {experiences.map((exp, index) => (
+              {experiences.map((exp) => (
                 <motion.div
                   key={exp.id}
                   variants={itemVariants}
@@ -78,13 +134,13 @@ export default function Experience() {
                     {isAdmin && (
                       <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => toast({ title: 'Edit Experience' })}
+                          onClick={() => handleEditExperience(exp)}
                           className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => toast({ title: 'Delete Experience', variant: 'destructive' })}
+                          onClick={() => handleDeleteExperience(exp)}
                           className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -132,6 +188,22 @@ export default function Experience() {
           </motion.div>
         </div>
       </section>
+
+      {/* Add/Edit Experience Modal */}
+      <ExperienceFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        experience={editingExperience}
+        onSave={handleSaveExperience}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title={deletingExperience?.role || 'Experience'}
+      />
     </PageLayout>
   );
 }

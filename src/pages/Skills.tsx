@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Plus, Trash2, Eye, EyeOff, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import PageLayout from '@/components/layout/PageLayout';
 import SectionHeader from '@/components/ui/SectionHeader';
 import AdminButton from '@/components/admin/AdminButton';
+import SkillFormModal from '@/components/admin/SkillFormModal';
+import DeleteConfirmModal from '@/components/admin/DeleteConfirmModal';
 import { skills as initialSkills } from '@/lib/mockData';
 import { Skill } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
@@ -38,9 +40,42 @@ export default function Skills() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const { isAdmin } = useAdmin();
 
+  // Admin modals
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingSkill, setDeletingSkill] = useState<Skill | null>(null);
+
   const filteredSkills = selectedCategory
     ? skills.filter((skill) => skill.category === selectedCategory && skill.visible)
     : skills.filter((skill) => skill.visible);
+
+  const handleAddSkill = () => {
+    setEditingSkill(null);
+    setFormModalOpen(true);
+  };
+
+  const handleEditSkill = (skill: Skill) => {
+    setEditingSkill(skill);
+    setFormModalOpen(true);
+  };
+
+  const handleSaveSkill = (skillData: Partial<Skill>) => {
+    if (editingSkill) {
+      setSkills(prev => prev.map(s => 
+        s.id === editingSkill.id ? { ...s, ...skillData } : s
+      ));
+    } else {
+      const newSkill: Skill = {
+        id: Date.now().toString(),
+        name: skillData.name || '',
+        category: skillData.category || 'frontend',
+        proficiency: skillData.proficiency || 80,
+        visible: skillData.visible ?? true,
+      };
+      setSkills(prev => [newSkill, ...prev]);
+    }
+  };
 
   const toggleVisibility = (skillId: string) => {
     setSkills((prev) =>
@@ -54,13 +89,18 @@ export default function Skills() {
     });
   };
 
-  const deleteSkill = (skillId: string) => {
-    setSkills((prev) => prev.filter((skill) => skill.id !== skillId));
-    toast({
-      title: 'Skill deleted',
-      description: 'The skill has been removed.',
-      variant: 'destructive',
-    });
+  const handleDeleteSkill = (skill: Skill) => {
+    setDeletingSkill(skill);
+    setDeleteModalOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (deletingSkill) {
+      setSkills(prev => prev.filter(s => s.id !== deletingSkill.id));
+      toast({ title: 'Skill Deleted', description: `"${deletingSkill.name}" has been removed.`, variant: 'destructive' });
+      setDeleteModalOpen(false);
+      setDeletingSkill(null);
+    }
   };
 
   return (
@@ -73,7 +113,7 @@ export default function Skills() {
               subtitle="The tools and technologies I work with"
             />
             <AdminButton
-              onClick={() => toast({ title: 'Add Skill', description: 'Skill form would open here.' })}
+              onClick={handleAddSkill}
               icon={<Plus className="w-4 h-4 mr-1" />}
             >
               Add Skill
@@ -125,6 +165,12 @@ export default function Skills() {
                   {isAdmin && (
                     <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
+                        onClick={() => handleEditSkill(skill)}
+                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => toggleVisibility(skill.id)}
                         className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
                       >
@@ -135,7 +181,7 @@ export default function Skills() {
                         )}
                       </button>
                       <button
-                        onClick={() => deleteSkill(skill.id)}
+                        onClick={() => handleDeleteSkill(skill)}
                         className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -198,6 +244,22 @@ export default function Skills() {
           </div>
         </div>
       </section>
+
+      {/* Add/Edit Skill Modal */}
+      <SkillFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        skill={editingSkill}
+        onSave={handleSaveSkill}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title={deletingSkill?.name || 'Skill'}
+      />
     </PageLayout>
   );
 }
