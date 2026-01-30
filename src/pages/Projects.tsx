@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ExternalLink, Github, Filter, Plus, X } from 'lucide-react';
+import { ExternalLink, Github, Filter, Plus, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PageLayout from '@/components/layout/PageLayout';
@@ -8,9 +8,12 @@ import SectionHeader from '@/components/ui/SectionHeader';
 import AdminButton from '@/components/admin/AdminButton';
 import SkillBadge from '@/components/ui/SkillBadge';
 import EmptyState from '@/components/ui/EmptyState';
-import { projects } from '@/lib/mockData';
+import ProjectFormModal from '@/components/admin/ProjectFormModal';
+import DeleteConfirmModal from '@/components/admin/DeleteConfirmModal';
+import { projects as initialProjects } from '@/lib/mockData';
 import { Project } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
+import { useAdmin } from '@/contexts/AdminContext';
 
 const categories = [
   { id: 'all', label: 'All Projects' },
@@ -34,13 +37,71 @@ const itemVariants = {
 };
 
 export default function Projects() {
+  const { isAdmin } = useAdmin();
+  const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  
+  // Admin modals
+  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingProject, setDeletingProject] = useState<Project | null>(null);
 
   const filteredProjects =
     selectedCategory === 'all'
       ? projects
       : projects.filter((p) => p.category === selectedCategory);
+
+  const handleAddProject = () => {
+    setEditingProject(null);
+    setFormModalOpen(true);
+  };
+
+  const handleEditProject = (project: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingProject(project);
+    setFormModalOpen(true);
+  };
+
+  const handleDeleteProject = (project: Project, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingProject(project);
+    setDeleteModalOpen(true);
+  };
+
+  const handleSaveProject = (projectData: Partial<Project>) => {
+    if (editingProject) {
+      setProjects(prev => prev.map(p => 
+        p.id === editingProject.id ? { ...p, ...projectData, updatedAt: new Date().toISOString() } : p
+      ));
+    } else {
+      const newProject: Project = {
+        id: Date.now().toString(),
+        title: projectData.title || '',
+        description: projectData.description || '',
+        longDescription: projectData.longDescription,
+        techStack: projectData.techStack || [],
+        githubUrl: projectData.githubUrl,
+        liveUrl: projectData.liveUrl,
+        images: projectData.images || [],
+        category: projectData.category || 'personal',
+        featured: projectData.featured || false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setProjects(prev => [newProject, ...prev]);
+    }
+  };
+
+  const confirmDelete = () => {
+    if (deletingProject) {
+      setProjects(prev => prev.filter(p => p.id !== deletingProject.id));
+      toast({ title: 'Project Deleted', description: `"${deletingProject.title}" has been removed.`, variant: 'destructive' });
+      setDeleteModalOpen(false);
+      setDeletingProject(null);
+    }
+  };
 
   return (
     <PageLayout>
@@ -52,7 +113,7 @@ export default function Projects() {
               subtitle="A showcase of my work and the problems I've solved"
             />
             <AdminButton
-              onClick={() => toast({ title: 'Add Project', description: 'Project form would open here.' })}
+              onClick={handleAddProject}
               icon={<Plus className="w-4 h-4 mr-1" />}
             >
               Add Project
@@ -93,9 +154,27 @@ export default function Projects() {
                     variants={itemVariants}
                     layout
                     exit={{ opacity: 0, scale: 0.9 }}
-                    className="bg-card rounded-xl shadow-card border border-border overflow-hidden group cursor-pointer"
+                    className="bg-card rounded-xl shadow-card border border-border overflow-hidden group cursor-pointer relative"
                     onClick={() => setSelectedProject(project)}
                   >
+                    {/* Admin Controls */}
+                    {isAdmin && (
+                      <div className="absolute top-3 right-3 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => handleEditProject(project, e)}
+                          className="p-2 rounded-md bg-background/80 backdrop-blur hover:bg-background text-muted-foreground hover:text-foreground"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteProject(project, e)}
+                          className="p-2 rounded-md bg-background/80 backdrop-blur hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
                     {/* Image */}
                     <div className="aspect-video bg-muted relative overflow-hidden">
                       <img
@@ -142,7 +221,7 @@ export default function Projects() {
               title="No projects found"
               description="No projects match the selected category. Try selecting a different filter."
               actionLabel="Add First Project"
-              onAction={() => toast({ title: 'Add Project' })}
+              onAction={handleAddProject}
             />
           )}
         </div>
@@ -159,7 +238,6 @@ export default function Projects() {
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-6 mt-4">
-                {/* Image */}
                 <div className="aspect-video bg-muted rounded-lg overflow-hidden">
                   <img
                     src={selectedProject.images[0]}
@@ -168,7 +246,6 @@ export default function Projects() {
                   />
                 </div>
 
-                {/* Description */}
                 <div>
                   <h4 className="font-semibold mb-2">About</h4>
                   <p className="text-muted-foreground">
@@ -176,7 +253,6 @@ export default function Projects() {
                   </p>
                 </div>
 
-                {/* Tech Stack */}
                 <div>
                   <h4 className="font-semibold mb-2">Technologies</h4>
                   <div className="flex flex-wrap gap-2">
@@ -186,15 +262,10 @@ export default function Projects() {
                   </div>
                 </div>
 
-                {/* Links */}
                 <div className="flex gap-4">
                   {selectedProject.githubUrl && (
                     <Button asChild variant="outline">
-                      <a
-                        href={selectedProject.githubUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
+                      <a href={selectedProject.githubUrl} target="_blank" rel="noopener noreferrer">
                         <Github className="w-4 h-4 mr-2" />
                         View Code
                       </a>
@@ -202,11 +273,7 @@ export default function Projects() {
                   )}
                   {selectedProject.liveUrl && (
                     <Button asChild className="bg-gradient-accent hover:opacity-90">
-                      <a
-                        href={selectedProject.liveUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
+                      <a href={selectedProject.liveUrl} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="w-4 h-4 mr-2" />
                         Live Demo
                       </a>
@@ -218,6 +285,22 @@ export default function Projects() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Add/Edit Project Modal */}
+      <ProjectFormModal
+        open={formModalOpen}
+        onClose={() => setFormModalOpen(false)}
+        project={editingProject}
+        onSave={handleSaveProject}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        title={deletingProject?.title || 'Project'}
+      />
     </PageLayout>
   );
 }
